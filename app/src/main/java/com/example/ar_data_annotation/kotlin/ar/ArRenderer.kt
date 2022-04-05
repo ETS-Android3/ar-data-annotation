@@ -88,6 +88,10 @@ class ArRenderer(val activity: ArActivity) :
     val CUBEMAP_RESOLUTION = 16
     val CUBEMAP_NUMBER_OF_IMPORTANCE_SAMPLES = 32
   }
+  // Map of Instant Placement Object id and user defined keyword
+  val keywordToId = HashMap<String, Int>()
+  val IdToKeyword = HashMap<Int, String>()
+  val searchResult = HashSet<Int>()
 
   lateinit var render: SampleRender
   lateinit var planeRenderer: PlaneRenderer
@@ -505,6 +509,7 @@ class ArRenderer(val activity: ArActivity) :
       }
 
     if (firstHitResult != null) {
+      Log.v(TAG, "create object hashCode=" + firstHitResult.hashCode());
       // Cap the number of objects created. This avoids overloading both the
       // rendering system and ARCore.
       if (wrappedAnchors.size >= 20) {
