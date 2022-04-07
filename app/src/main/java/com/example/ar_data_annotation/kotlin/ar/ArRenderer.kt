@@ -89,6 +89,7 @@ class ArRenderer(val activity: ArActivity) :
     val CUBEMAP_NUMBER_OF_IMPORTANCE_SAMPLES = 32
   }
   // Map of Instant Placement Object id and user defined keyword
+  // For Id (hashCode), store newAnchor.hashCode() instead of firstHitResult.hashCode()
   val keywordToId = HashMap<String, Int>()
   val IdToKeyword = HashMap<Int, String>()
   val searchResult = HashSet<Int>()
@@ -509,6 +510,10 @@ class ArRenderer(val activity: ArActivity) :
       }
 
     if (firstHitResult != null) {
+      // https://developers.google.com/ar/reference/java/com/google/ar/core/HitResult
+      Log.v(TAG, "create object distance=" + firstHitResult.getDistance());
+      Log.v(TAG, "create object pose=" + firstHitResult.getHitPose());
+      Log.v(TAG, "create object trackable=" + firstHitResult.getTrackable());
       Log.v(TAG, "create object hashCode=" + firstHitResult.hashCode());
       // Cap the number of objects created. This avoids overloading both the
       // rendering system and ARCore.
@@ -520,8 +525,11 @@ class ArRenderer(val activity: ArActivity) :
       // Adding an Anchor tells ARCore that it should track this position in
       // space. This anchor is created on the Plane to place the 3D model
       // in the correct position relative both to the world and to the plane.
-      wrappedAnchors.add(WrappedAnchor(firstHitResult.createAnchor(), firstHitResult.trackable))
+      val newAnchor = firstHitResult.createAnchor();
+      Log.v(TAG, "create object newAnchor.hashCode=" + newAnchor.hashCode());
+      wrappedAnchors.add(WrappedAnchor(newAnchor, firstHitResult.trackable))
 
+      Log.v(TAG, "create object wrappedAnchors[0].anchor.hashCode=" + wrappedAnchors[0].anchor.hashCode());
       // For devices that support the Depth API, shows a dialog to suggest enabling
       // depth-based occlusion. This dialog needs to be spawned on the UI thread.
       activity.runOnUiThread { activity.view.showOcclusionDialogIfNeeded() }
