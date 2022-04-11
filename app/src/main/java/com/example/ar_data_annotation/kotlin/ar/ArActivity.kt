@@ -17,8 +17,13 @@ package com.example.ar_data_annotation.kotlin.ar
 
 import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.ListView
+import android.widget.SearchView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.example.ar_data_annotation.R
 import com.google.ar.core.Config
 import com.google.ar.core.Config.InstantPlacementMode
 import com.google.ar.core.Session
@@ -50,6 +55,10 @@ class ArActivity : AppCompatActivity() {
 
   val instantPlacementSettings = InstantPlacementSettings()
   val depthSettings = DepthSettings()
+
+  lateinit var searchView: SearchView
+  lateinit var listView: ListView
+  lateinit var adapter: ArrayAdapter<*>
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -89,10 +98,20 @@ class ArActivity : AppCompatActivity() {
 
     // Sets up an example renderer using our HelloARRenderer.
     SampleRender(view.surfaceView, renderer, assets)
-
     depthSettings.onCreate(this)
     instantPlacementSettings.onCreate(this)
+
+    // search bar initialisation
+    searchView = findViewById(R.id.searchView)
+    listView = findViewById(R.id.listView)
+
+    adapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, renderer.getSearchList1())
+    listView.adapter = adapter
+    listView.setVisibility(View.GONE);
+    renderer.setSearchListener(adapter as ArrayAdapter<String>,searchView,listView)
+
   }
+
 
   // Configure the session, using Lighting Estimation, and Depth mode.
   fun configureSession(session: Session) {

@@ -14,10 +14,15 @@
  * limitations under the License.
  */
 package com.example.ar_data_annotation.kotlin.ar
-
+import android.view.View
 import android.opengl.GLES30
 import android.opengl.Matrix
+import android.text.TextUtils
 import android.util.Log
+import android.widget.ArrayAdapter
+import android.widget.ListView
+import android.widget.SearchView
+import android.widget.Toast
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.example.ar_data_annotation.R
@@ -133,12 +138,79 @@ class ArRenderer(val activity: ArActivity) :
   val viewInverseMatrix = FloatArray(16)
   val worldLightDirection = floatArrayOf(0.0f, 0.0f, 0.0f, 0.0f)
   val viewLightDirection = FloatArray(4) // view x world light direction
-
+  @Volatile var searchList: ArrayList<String> = ArrayList()
+  @Volatile var matchingSet: ArrayList<String> = ArrayList()
+  var rendAdapter: ArrayAdapter<String>? = null
   val session
     get() = activity.arCoreSessionHelper.session
 
   val displayRotationHelper = DisplayRotationHelper(activity)
   val trackingStateHelper = TrackingStateHelper(activity)
+
+
+  fun getSearchList1(): ArrayList<String> {
+    /*searchList.add("Apple")
+    searchList.add("Banana")
+    searchList.add("Pineapple")
+    searchList.add("Orange")
+    searchList.add("Mango")
+    searchList.add("Grapes")*/
+//    searchList.add("Lemon")
+//    searchList.add("Melon")
+//    searchList.add("Watermelon")
+//    searchList.add("Papaya")
+    // keep 0 markers initially
+    return searchList
+  }
+
+  fun addItemtoAdapter(item: String ) {
+    rendAdapter?.add(item) // to modify search list use this function and notify changes to adapter
+    rendAdapter?.notifyDataSetChanged()
+
+  }
+
+  fun getMatchedId(): ArrayList<Int> {
+    var matchedIds: ArrayList<Int> = ArrayList()
+
+    for(matchedItem in matchingSet)
+    {
+      matchedIds.add(keywordToId.getOrDefault(matchedItem,-1))
+    }
+    return matchedIds
+  }
+
+
+  //  // This method implements the search logic
+  fun setSearchListener(adapter: ArrayAdapter<String>, searchView: SearchView, listView: ListView) {
+    rendAdapter = adapter
+    searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+      override fun onQueryTextSubmit(query: String): Boolean {
+
+        if (searchList.contains(query)) {
+          adapter.filter.filter(query)
+
+          for (i in 0..adapter.count) {
+            matchingSet.add(adapter.getItem(i).toString())
+          }
+
+        } else {
+          Toast.makeText(activity, "No Match found", Toast.LENGTH_LONG).show()
+        }
+        return true
+      }
+      override fun onQueryTextChange(newText: String): Boolean {
+        adapter.filter.filter(newText)
+//        Log.e(TAG, "Sam $i")
+        if(TextUtils.isEmpty(newText)){
+          listView.setVisibility(View.GONE);
+        }
+        else {
+        listView.setVisibility(View.VISIBLE);
+        }
+        return true;
+      }
+    })
+  }
 
   override fun onResume(owner: LifecycleOwner) {
     displayRotationHelper.onResume()
