@@ -35,4 +35,20 @@
       android:src="@drawable/ic_settings"
       android:background="@android:color/transparent"/>
 
+  <ListView
+      android:id="@+id/listView"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:layout_below="@+id/searchView"
+      android:divider="#ad5"
+      android:dividerHeight="2dp" />
+
+  <SearchView
+      android:id="@+id/searchView"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_alignParentTop="true"
+      android:iconifiedByDefault="false"
+      android:queryHint="Search Here" />
+
 </RelativeLayout>
