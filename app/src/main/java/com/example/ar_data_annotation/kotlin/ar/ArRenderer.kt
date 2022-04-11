@@ -460,6 +460,10 @@ class ArRenderer(val activity: ArActivity) :
 
     // Visualize anchors created by touch.
     render.clear(virtualSceneFramebuffer, 0f, 0f, 0f, 0f)
+
+    // If search, filter with ids by calling show_anchor_from_search
+
+    // If no search
     for ((anchor, trackable) in
       wrappedAnchors.filter { it.anchor.trackingState == TrackingState.TRACKING }) {
       // Get the current pose of an Anchor in world space. The Anchor pose is updated
@@ -606,6 +610,23 @@ class ArRenderer(val activity: ArActivity) :
       // depth-based occlusion. This dialog needs to be spawned on the UI thread.
       activity.runOnUiThread { activity.view.showOcclusionDialogIfNeeded() }
     }
+  }
+
+  private fun show_anchor_from_search(ids: HashSet<Int>): List<WrappedAnchor> {
+    val new_wrappedAnchors = wrappedAnchors.filter { (anchor, trackable) -> ids.contains(anchor.hashCode()) }
+
+    return new_wrappedAnchors;
+  }
+
+  private fun ids_to_keywords(ids: HashSet<Int>): List<String> {
+    val filtered_IdToKeyword = IdToKeyword.filter { (id, keyword) -> ids.contains(id) }
+    val keywords = mutableListOf<String>()
+
+    for (e in filtered_IdToKeyword) {
+      keywords.add(e.value);
+    }
+
+    return keywords;
   }
 
   private fun showError(errorMessage: String) =
