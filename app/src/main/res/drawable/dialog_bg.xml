@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Copyright 2021 Google LLC
+   Copyright 2019 Google LLC
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,10 +14,14 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -->
-<menu xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
-  <item android:id="@+id/public_settings" android:title="Public data annotation"/>
-  <item android:id="@+id/instant_placement_settings"
-      android:title="Instant Placement"/>
-</menu>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid
+        android:color="@android:color/white"/>
+    <corners
+        android:radius="10dp" />
+    <padding
+        android:left="5dp"
+        android:top="10dp"
+        android:right="5dp"
+        android:bottom="10dp" />
+</shape>
