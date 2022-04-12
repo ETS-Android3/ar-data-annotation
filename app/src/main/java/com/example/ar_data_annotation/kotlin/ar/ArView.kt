@@ -15,18 +15,23 @@
  */
 package com.example.ar_data_annotation.kotlin.ar
 
+import android.app.Activity
+import android.content.Intent
 import android.content.res.Resources
 import android.opengl.GLSurfaceView
 import android.view.View
 import android.widget.ImageButton
 import android.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat.startActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.example.ar_data_annotation.R
-import com.google.ar.core.Config
+import com.example.ar_data_annotation.java.cloudanchor.CloudAnchorActivity
 import com.example.ar_data_annotation.java.common.helpers.SnackbarHelper
 import com.example.ar_data_annotation.java.common.helpers.TapHelper
+import com.google.ar.core.Config
+
 
 /** Contains UI elements for Hello AR. */
 class ArView(val activity: ArActivity) : DefaultLifecycleObserver {
@@ -38,7 +43,8 @@ class ArView(val activity: ArActivity) : DefaultLifecycleObserver {
         PopupMenu(activity, v).apply {
           setOnMenuItemClickListener { item ->
             when (item.itemId) {
-              R.id.depth_settings -> launchDepthSettingsMenuDialog()
+//              R.id.depth_settings -> launchDepthSettingsMenuDialog()
+              R.id.public_settings -> gotoCloudAnchorsActivity()
               R.id.instant_placement_settings -> launchInstantPlacementSettingsMenuDialog()
               else -> null
             } != null
@@ -86,6 +92,12 @@ class ArView(val activity: ArActivity) : DefaultLifecycleObserver {
         activity.depthSettings.setUseDepthForOcclusion(false)
       }
       .show()
+  }
+
+  private fun gotoCloudAnchorsActivity() {
+
+    val intent = Intent(activity, CloudAnchorActivity::class.java)
+    activity.startActivity(intent)
   }
 
   private fun launchInstantPlacementSettingsMenuDialog() {
