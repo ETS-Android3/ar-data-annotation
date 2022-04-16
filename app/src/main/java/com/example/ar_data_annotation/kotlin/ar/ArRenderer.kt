@@ -155,7 +155,7 @@ class ArRenderer(val activity: ArActivity) :
     searchList.add("Orange")
     searchList.add("Mango")
     searchList.add("Grapes")*/
-//    searchList.add("Lemon")
+    //searchList.add("Lemon")
 //    searchList.add("Melon")
 //    searchList.add("Watermelon")
 //    searchList.add("Papaya")
@@ -171,7 +171,7 @@ class ArRenderer(val activity: ArActivity) :
 
   fun getMatchedId(): ArrayList<Int> {
     var matchedIds: ArrayList<Int> = ArrayList()
-
+    Log.v(TAG, "In getMatchedId");
     for(matchedItem in matchingSet)
     {
       matchedIds.add(keywordToId.getOrDefault(matchedItem,-1))
@@ -462,6 +462,18 @@ class ArRenderer(val activity: ArActivity) :
     render.clear(virtualSceneFramebuffer, 0f, 0f, 0f, 0f)
 
     // If search, filter with ids by calling show_anchor_from_search
+    if (matchingSet.isNotEmpty()) {
+      //keywordToId.put("Lemon", 123);
+      Log.v(TAG, "matchingSet not empty, matchingSet=" + matchingSet);
+      // There is error because keywordToId is empty?
+      // Works in the first time but failed in the second time with the same code
+      // What do you want Android Studio??
+      val matchedIds = getMatchedId()
+      Log.v(TAG, "matchedIds=" + matchedIds);
+      //val anchors = show_anchor_from_search(matchedIds)
+
+      // draw
+    }
 
     // If no search
     for ((anchor, trackable) in
@@ -612,8 +624,8 @@ class ArRenderer(val activity: ArActivity) :
     }
   }
 
-  private fun show_anchor_from_search(ids: HashSet<Int>): List<WrappedAnchor> {
-    val new_wrappedAnchors = wrappedAnchors.filter { (anchor, trackable) -> ids.contains(anchor.hashCode()) }
+  private fun show_anchor_from_search(matchedIds: ArrayList<Int>): List<WrappedAnchor> {
+    val new_wrappedAnchors = wrappedAnchors.filter { (anchor, trackable) -> matchedIds.contains(anchor.hashCode()) }
 
     return new_wrappedAnchors;
   }
