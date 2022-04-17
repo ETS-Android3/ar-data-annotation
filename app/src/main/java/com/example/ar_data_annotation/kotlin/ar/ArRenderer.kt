@@ -14,52 +14,37 @@
  * limitations under the License.
  */
 package com.example.ar_data_annotation.kotlin.ar
-import android.view.View
+
 import android.opengl.GLES30
 import android.opengl.Matrix
 import android.text.TextUtils
+import android.util.DisplayMetrics
 import android.util.Log
-import android.widget.ArrayAdapter
-import android.widget.ListView
-import android.widget.SearchView
-import android.widget.Toast
+import android.view.View
+import android.widget.*
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.example.ar_data_annotation.R
-import com.google.ar.core.Anchor
-import com.google.ar.core.Camera
-import com.google.ar.core.DepthPoint
-import com.google.ar.core.Frame
-import com.google.ar.core.InstantPlacementPoint
-import com.google.ar.core.LightEstimate
-import com.google.ar.core.Plane
-import com.google.ar.core.Point
-import com.google.ar.core.Session
-import com.google.ar.core.Trackable
-import com.google.ar.core.TrackingFailureReason
-import com.google.ar.core.TrackingState
 import com.example.ar_data_annotation.java.common.helpers.DisplayRotationHelper
 import com.example.ar_data_annotation.java.common.helpers.TrackingStateHelper
-import com.example.ar_data_annotation.java.common.samplerender.Framebuffer
-import com.example.ar_data_annotation.java.common.samplerender.GLError
-import com.example.ar_data_annotation.java.common.samplerender.Mesh
-import com.example.ar_data_annotation.java.common.samplerender.SampleRender
-import com.example.ar_data_annotation.java.common.samplerender.Shader
-import com.example.ar_data_annotation.java.common.samplerender.Texture
-import com.example.ar_data_annotation.java.common.samplerender.VertexBuffer
+import com.example.ar_data_annotation.java.common.samplerender.*
 import com.example.ar_data_annotation.java.common.samplerender.arcore.BackgroundRenderer
 import com.example.ar_data_annotation.java.common.samplerender.arcore.PlaneRenderer
 import com.example.ar_data_annotation.java.common.samplerender.arcore.SpecularCubemapFilter
+import com.google.ar.core.*
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.NotYetAvailableException
 import java.io.IOException
 import java.nio.ByteBuffer
+
 
 /** Renders the HelloAR application using our example Renderer. */
 class ArRenderer(val activity: ArActivity) :
   SampleRender.Renderer, DefaultLifecycleObserver {
   companion object {
     val TAG = "ArRenderer"
+    var anchorCounter = 1
+    var defaultAnchorText = "New Marker"
 
     // See the definition of updateSphericalHarmonicsCoefficients for an explanation of these
     // constants.
@@ -79,6 +64,8 @@ class ArRenderer(val activity: ArActivity) :
     private val Z_NEAR = 0.1f
     private val Z_FAR = 100f
 
+    private val MIN_TEXT_SIZE = 5
+    private val MAX_TEXT_SIZE = 40
     // Assumed distance from the device camera to the surface on which user will try to place
     // objects.
     // This value affects the apparent scale of objects while the tracking method of the
@@ -147,7 +134,6 @@ class ArRenderer(val activity: ArActivity) :
   val displayRotationHelper = DisplayRotationHelper(activity)
   val trackingStateHelper = TrackingStateHelper(activity)
 
-
   fun getSearchList1(): ArrayList<String> {
     /*searchList.add("Apple")
     searchList.add("Banana")
@@ -163,8 +149,14 @@ class ArRenderer(val activity: ArActivity) :
     return searchList
   }
 
-  fun addItemtoAdapter(item: String ) {
+  fun addItemtoAdapter(item: String, anchorId: Int) {
     rendAdapter?.add(item) // to modify search list use this function and notify changes to adapter
+    rendAdapter?.notifyDataSetChanged()
+  }
+
+  fun removeItemFromAdapter(item: String, anchorId: Int) {
+    if(rendAdapter!=null && rendAdapter!!.getPosition(item) >= 0)
+      rendAdapter?.remove(item) // to modify search list use this function and notify changes to adapter
     rendAdapter?.notifyDataSetChanged()
 
   }
@@ -475,11 +467,12 @@ class ArRenderer(val activity: ArActivity) :
     }
 
     // If no search
-    for ((anchor, trackable) in
+    for ((anchor, trackable, anchorText) in
       wrappedAnchors.filter { it.anchor.trackingState == TrackingState.TRACKING }) {
       // Get the current pose of an Anchor in world space. The Anchor pose is updated
       // during calls to session.update() as ARCore refines its estimate of the world.
       anchor.pose.toMatrix(modelMatrix, 0)
+      updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix)
 
       // Calculate model/view/projection matrices
       Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
@@ -503,6 +496,52 @@ class ArRenderer(val activity: ArActivity) :
     // Compose the virtual scene with the background.
     backgroundRenderer.drawVirtualScene(render, virtualSceneFramebuffer, Z_NEAR, Z_FAR)
   }
+
+  private fun updateAnchorText(
+    anchor: Anchor,
+    anchorText: TextView,
+    camera: Camera,
+    modelMatrix: FloatArray,
+    viewMatrix: FloatArray,
+    projectionMatrix: FloatArray
+  ) {
+    val displayMetrics = DisplayMetrics()
+    activity.populateDisplayMetrics(displayMetrics)
+    val anchor_2d = get2DAnchorCoordinates(
+      anchor,
+      camera,
+      displayMetrics,
+      modelMatrix,
+      viewMatrix,
+      projectionMatrix
+    )
+
+    var anchorToCamDist = getDistFromCamera(anchor, camera)
+    var textSize = getTextSize(anchorToCamDist)
+    activity.runOnUiThread{ anchorText.setTextSize(textSize) }
+
+    anchorText.x = anchor_2d[0] - (anchorText.width/2)
+    anchorText.y = anchor_2d[1]
+  }
+
+  private fun getTextSize(anchorDist : Double) : Float {
+    val maxReducableDist = 2.0 //You can have anchors farther than that, they just wont have their text size shrunk further
+    var dist = anchorDist
+    if(anchorDist>maxReducableDist)
+      dist = maxReducableDist
+    var sizeScale = maxReducableDist - dist
+    return (MIN_TEXT_SIZE + ((sizeScale / maxReducableDist) * (MAX_TEXT_SIZE - MIN_TEXT_SIZE))).toFloat()
+  }
+
+  private fun getDistFromCamera(anchor: Anchor, camera : Camera): Double {
+    return dictCalculation3D(anchor.pose.tx(), camera.pose.tx(), anchor.pose.ty(), camera.pose.ty(), anchor.pose.tz(), camera.pose.tz())
+  }
+
+  private fun dictCalculation3D(x1 : Float, x2 : Float, y1 : Float, y2: Float, z1 : Float, z2 : Float) : Double {
+    return Math.sqrt(Math.pow((x1-x2).toDouble(), 2.0) + Math.pow((y1-y2).toDouble(), 2.0) + Math.pow(
+      (z1-z2).toDouble(), 2.0))
+  }
+
 
   /** Checks if we detected at least one plane. */
   private fun Session.hasTrackingPlane() =
@@ -614,13 +653,63 @@ class ArRenderer(val activity: ArActivity) :
       // in the correct position relative both to the world and to the plane.
       val newAnchor = firstHitResult.createAnchor();
       Log.v(TAG, "create object newAnchor.hashCode=" + newAnchor.hashCode());
-      wrappedAnchors.add(WrappedAnchor(newAnchor, firstHitResult.trackable))
+      var newWrappedAnchor = WrappedAnchor(newAnchor, firstHitResult.trackable, activity.setNewTextView(defaultAnchorText + " #${anchorCounter}", 0f, 0f, newAnchor.hashCode()))
+      activity.promptAnchorText(newWrappedAnchor)
+      anchorCounter++
+
+      wrappedAnchors.add(newWrappedAnchor)
 
       Log.v(TAG, "create object wrappedAnchors[0].anchor.hashCode=" + wrappedAnchors[0].anchor.hashCode());
       // For devices that support the Depth API, shows a dialog to suggest enabling
       // depth-based occlusion. This dialog needs to be spawned on the UI thread.
       activity.runOnUiThread { activity.view.showOcclusionDialogIfNeeded() }
     }
+  }
+
+  private fun get2DAnchorCoordinates(
+    anchor: Anchor,
+    camera: Camera,
+    displayMetrics: DisplayMetrics,
+    modelMatrix: FloatArray,
+    viewMatrix: FloatArray,
+    projectionMatrix: FloatArray
+  ): FloatArray {
+    val spatial3Dto2Dmatrix: FloatArray =
+      calculate3Dto2DMatrix(modelMatrix, viewMatrix, projectionMatrix)
+    return calculate3Dto2D(displayMetrics.widthPixels, displayMetrics.heightPixels, spatial3Dto2Dmatrix)
+  }
+
+  fun setAnchorText(newAnchorText: String, textView: TextView, anchorId: Int) {
+    val curText:String = textView.text.toString()
+    if(curText != null && curText.length >= 0) {
+      removeItemFromAdapter(curText, anchorId);
+      removePointAnnotation(anchorId, newAnchorText)
+    }
+    addItemtoAdapter(newAnchorText, anchorId)
+    addPointAnnotation(anchorId, newAnchorText)
+
+    textView.setText(newAnchorText)
+  }
+
+  private fun calc2DCoordinates(
+    screenWidth: Int,
+    resultVec: FloatArray,
+    screenHeight: Int
+  ): FloatArray {
+    val positionCoordinates = floatArrayOf(0.0f, 0.0f)
+    positionCoordinates[0] = screenWidth * ((resultVec[0] + 1.0f) / 2.0f)
+    positionCoordinates[1] = screenHeight * ((1.0f - resultVec[1]) / 2.0f)
+    return positionCoordinates
+  }
+
+  private fun addPointAnnotation(hashCode: Int, keyword: String) {
+    IdToKeyword.put(hashCode, keyword)
+    keywordToId.put(keyword, hashCode)
+  }
+
+  private fun removePointAnnotation(hashCode: Int, keyword: String) {
+    IdToKeyword.remove(hashCode, keyword)
+    keywordToId.remove(keyword, hashCode)
   }
 
   private fun show_anchor_from_search(matchedIds: ArrayList<Int>): List<WrappedAnchor> {
@@ -640,6 +729,44 @@ class ArRenderer(val activity: ArActivity) :
     return keywords;
   }
 
+  fun calculate3Dto2DMatrix(
+    modelMatrix: FloatArray?,
+    viewMatrix: FloatArray?,
+    projectMatrix: FloatArray?
+  ): FloatArray {
+    val scaling = 1.0f
+    val scalingMatrix = FloatArray(16)
+    scalingMatrix[0] = scaling
+    scalingMatrix[5] = scaling
+    scalingMatrix[10] = scaling
+
+    Matrix.setIdentityM(scalingMatrix, 0)
+
+    val modelScaleProductMatrix = FloatArray(16)
+    Matrix.multiplyMM(modelScaleProductMatrix, 0, modelMatrix, 0, scalingMatrix, 0)
+
+    val viewModelScaleProductMatrix = FloatArray(16)
+    Matrix.multiplyMM(viewModelScaleProductMatrix, 0, viewMatrix, 0, modelScaleProductMatrix, 0)
+
+    val scaling3Dto2DMatrix = FloatArray(16)
+    Matrix.multiplyMM(scaling3Dto2DMatrix, 0, projectMatrix, 0, viewModelScaleProductMatrix, 0)
+    return scaling3Dto2DMatrix
+  }
+
+  fun calculate3Dto2D(
+    screenWidth: Int,
+    screenHeight: Int,
+    spatial3Dto2DMatrix: FloatArray
+  ): FloatArray {
+    val origCoord = floatArrayOf(0f, 0f, 0f, 1f)
+    val resultVec = FloatArray(4)
+    Matrix.multiplyMV(resultVec, 0, spatial3Dto2DMatrix, 0, origCoord, 0)
+    resultVec[0] /= resultVec[3]
+    resultVec[1] /= resultVec[3]
+
+    return calc2DCoordinates(screenWidth, resultVec, screenHeight)
+  }
+
   private fun showError(errorMessage: String) =
     activity.view.snackbarHelper.showError(activity, errorMessage)
 }
@@ -648,7 +775,8 @@ class ArRenderer(val activity: ArActivity) :
  * Associates an Anchor with the trackable it was attached to. This is used to be able to check
  * whether or not an Anchor originally was attached to an {@link InstantPlacementPoint}.
  */
-private data class WrappedAnchor(
+data class WrappedAnchor(
   val anchor: Anchor,
   val trackable: Trackable,
+  val anchorText: TextView
 )

@@ -15,13 +15,15 @@
  */
 package com.example.ar_data_annotation.kotlin.ar
 
+import android.graphics.Color
+import android.graphics.Typeface.BOLD
 import android.os.Bundle
+import android.text.Editable
+import android.util.DisplayMetrics
 import android.util.Log
 import android.view.View
-import android.widget.ArrayAdapter
-import android.widget.ListView
-import android.widget.SearchView
-import android.widget.Toast
+import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.ar_data_annotation.R
 import com.google.ar.core.Config
@@ -33,6 +35,7 @@ import com.example.ar_data_annotation.java.common.helpers.FullScreenHelper
 import com.example.ar_data_annotation.java.common.helpers.InstantPlacementSettings
 import com.example.ar_data_annotation.java.common.samplerender.SampleRender
 import com.example.ar_data_annotation.kotlin.common.helpers.ARCoreSessionLifecycleHelper
+import com.google.ar.core.Anchor
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.UnavailableApkTooOldException
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException
@@ -109,9 +112,61 @@ class ArActivity : AppCompatActivity() {
     listView.adapter = adapter
     listView.setVisibility(View.GONE);
     renderer.setSearchListener(adapter as ArrayAdapter<String>,searchView,listView)
-
   }
 
+  fun setNewTextView(textString: String, x: Float, y: Float, anchorId: Int): TextView {
+    var newTextView = TextView(applicationContext)
+    runOnUiThread {
+//      Log.v(TAG, "AddingText 1")
+      val rel: RelativeLayout = findViewById(R.id.mainrelativelayout);
+
+      renderer.setAnchorText(textString, newTextView, anchorId)
+      newTextView.setLayoutParams(
+        RelativeLayout.LayoutParams(
+          RelativeLayout.LayoutParams.WRAP_CONTENT,
+          RelativeLayout.LayoutParams.WRAP_CONTENT
+        )
+      )
+      newTextView.setTextColor(Color.RED)
+      newTextView.setTypeface(null, BOLD)
+      newTextView.x = x
+      newTextView.y = y
+
+      newTextView.setShadowLayer(10f, 10f, 10f, Color.BLACK)
+      rel.addView(newTextView)
+//      Log.v(TAG, "AddingText added text " + rel.id)
+    }
+    return newTextView
+  }
+
+  fun promptAnchorText(wrappedAnchor: WrappedAnchor): String {
+    var anchorStr = "New Marker"
+    var input : EditText? = null
+    runOnUiThread {
+      val alert: AlertDialog.Builder = AlertDialog.Builder(this)
+
+      alert.setTitle("Title")
+      alert.setMessage("Message")
+
+      input = EditText(this)
+      alert.setView(input)
+
+      alert.setPositiveButton("Submit") { _, _ ->
+        val value: Editable? = input!!.text
+        anchorStr = value.toString();
+        if(anchorStr.length > 0) {
+          renderer.setAnchorText(anchorStr, wrappedAnchor.anchorText, wrappedAnchor.anchor.hashCode())
+          Log.v(TAG, "Assigning text")
+        }
+      }
+      alert.show()
+    }
+    return anchorStr;
+  }
+
+  fun populateDisplayMetrics(displayMetrics : DisplayMetrics) {
+    getWindowManager().getDefaultDisplay().getMetrics(displayMetrics)
+  }
 
   // Configure the session, using Lighting Estimation, and Depth mode.
   fun configureSession(session: Session) {
