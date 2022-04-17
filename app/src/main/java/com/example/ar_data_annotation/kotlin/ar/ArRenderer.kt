@@ -155,7 +155,7 @@ class ArRenderer(val activity: ArActivity) :
     searchList.add("Orange")
     searchList.add("Mango")
     searchList.add("Grapes")*/
-    //searchList.add("Lemon")
+//    searchList.add("Lemon")
 //    searchList.add("Melon")
 //    searchList.add("Watermelon")
 //    searchList.add("Papaya")
@@ -189,7 +189,7 @@ class ArRenderer(val activity: ArActivity) :
         if (searchList.contains(query)) {
           adapter.filter.filter(query)
 
-          for (i in 0..adapter.count) {
+          for (i in 0..(adapter.count-1)) {
             matchingSet.add(adapter.getItem(i).toString())
           }
 
@@ -463,11 +463,10 @@ class ArRenderer(val activity: ArActivity) :
 
     // If search, filter with ids by calling show_anchor_from_search
     if (matchingSet.isNotEmpty()) {
-      //keywordToId.put("Lemon", 123);
+      // for test
+      // keywordToId.put("Lemon", 123);
+
       Log.v(TAG, "matchingSet not empty, matchingSet=" + matchingSet);
-      // There is error because keywordToId is empty?
-      // Works in the first time but failed in the second time with the same code
-      // What do you want Android Studio??
       val matchedIds = getMatchedId()
       Log.v(TAG, "matchedIds=" + matchedIds);
       //val anchors = show_anchor_from_search(matchedIds)
