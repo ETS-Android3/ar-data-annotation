@@ -163,7 +163,6 @@ class ArRenderer(val activity: ArActivity) :
 
   fun getMatchedId(): ArrayList<Int> {
     var matchedIds: ArrayList<Int> = ArrayList()
-    Log.v(TAG, "In getMatchedId");
     for(matchedItem in matchingSet)
     {
       matchedIds.add(keywordToId.getOrDefault(matchedItem,-1))
@@ -461,37 +460,73 @@ class ArRenderer(val activity: ArActivity) :
       Log.v(TAG, "matchingSet not empty, matchingSet=" + matchingSet);
       val matchedIds = getMatchedId()
       Log.v(TAG, "matchedIds=" + matchedIds);
-      //val anchors = show_anchor_from_search(matchedIds)
+      val searched_anchors = show_anchor_from_search(matchedIds)
+      Log.v(TAG, "searched_anchors=" + searched_anchors);
+      val not_searched_anchors = show_anchor_not_from_search(matchedIds)
 
-      // draw
-    }
+      Log.v(TAG, "not_searched_anchors=" + not_searched_anchors);
 
-    // If no search
-    for ((anchor, trackable, anchorText) in
-      wrappedAnchors.filter { it.anchor.trackingState == TrackingState.TRACKING }) {
-      // Get the current pose of an Anchor in world space. The Anchor pose is updated
-      // during calls to session.update() as ARCore refines its estimate of the world.
-      anchor.pose.toMatrix(modelMatrix, 0)
-      updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix)
+      // draw searched anchors
+      for ((anchor, trackable, anchorText) in searched_anchors) {
+        Log.v(TAG, "anchor.pose=" + anchor.pose);
+        anchor.pose.toMatrix(modelMatrix, 0)
 
-      // Calculate model/view/projection matrices
-      Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
-      Matrix.multiplyMM(modelViewProjectionMatrix, 0, projectionMatrix, 0, modelViewMatrix, 0)
+        // Calculate model/view/projection matrices
+        Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
+        Matrix.multiplyMM(modelViewProjectionMatrix, 0, projectionMatrix, 0, modelViewMatrix, 0)
 
-      // Update shader properties and draw
-      virtualObjectShader.setMat4("u_ModelView", modelViewMatrix)
-      virtualObjectShader.setMat4("u_ModelViewProjection", modelViewProjectionMatrix)
-      val texture =
-        if ((trackable as? InstantPlacementPoint)?.trackingMethod ==
+        // Update shader properties and draw
+        virtualObjectShader.setMat4("u_ModelView", modelViewMatrix)
+        virtualObjectShader.setMat4("u_ModelViewProjection", modelViewProjectionMatrix)
+        val texture =
+          if ((trackable as? InstantPlacementPoint)?.trackingMethod ==
             InstantPlacementPoint.TrackingMethod.SCREENSPACE_WITH_APPROXIMATE_DISTANCE
-        ) {
-          virtualObjectAlbedoInstantPlacementTexture
-        } else {
-          virtualObjectAlbedoTexture
-        }
-      virtualObjectShader.setTexture("u_AlbedoTexture", texture)
-      render.draw(virtualObjectMesh, virtualObjectShader, virtualSceneFramebuffer)
+          ) {
+            virtualObjectAlbedoInstantPlacementTexture
+          } else {
+            virtualObjectAlbedoTexture
+          }
+        virtualObjectShader.setTexture("u_AlbedoTexture", texture)
+        render.draw(virtualObjectMesh, virtualObjectShader, virtualSceneFramebuffer)
+      }
+
+      // draw not searched anchors
+      for ((anchor, trackable, anchorText) in not_searched_anchors) {
+        Log.v(TAG, "anchor.pose=" + anchor.pose);
+        updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 1)
+      }
+
     }
+    // If no search
+    else {
+      for ((anchor, trackable, anchorText) in
+        wrappedAnchors.filter { it.anchor.trackingState == TrackingState.TRACKING }) {
+        // Get the current pose of an Anchor in world space. The Anchor pose is updated
+        // during calls to session.update() as ARCore refines its estimate of the world.
+        anchor.pose.toMatrix(modelMatrix, 0)
+        updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 0)
+
+        // Calculate model/view/projection matrices
+        Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
+        Matrix.multiplyMM(modelViewProjectionMatrix, 0, projectionMatrix, 0, modelViewMatrix, 0)
+
+        // Update shader properties and draw
+        virtualObjectShader.setMat4("u_ModelView", modelViewMatrix)
+        virtualObjectShader.setMat4("u_ModelViewProjection", modelViewProjectionMatrix)
+        val texture =
+          if ((trackable as? InstantPlacementPoint)?.trackingMethod ==
+            InstantPlacementPoint.TrackingMethod.SCREENSPACE_WITH_APPROXIMATE_DISTANCE
+          ) {
+            virtualObjectAlbedoInstantPlacementTexture
+          } else {
+            virtualObjectAlbedoTexture
+          }
+        virtualObjectShader.setTexture("u_AlbedoTexture", texture)
+        render.draw(virtualObjectMesh, virtualObjectShader, virtualSceneFramebuffer)
+      }
+    }
+
+
 
     // Compose the virtual scene with the background.
     backgroundRenderer.drawVirtualScene(render, virtualSceneFramebuffer, Z_NEAR, Z_FAR)
@@ -503,7 +538,8 @@ class ArRenderer(val activity: ArActivity) :
     camera: Camera,
     modelMatrix: FloatArray,
     viewMatrix: FloatArray,
-    projectionMatrix: FloatArray
+    projectionMatrix: FloatArray,
+    not_searched: Int
   ) {
     val displayMetrics = DisplayMetrics()
     activity.populateDisplayMetrics(displayMetrics)
@@ -517,20 +553,25 @@ class ArRenderer(val activity: ArActivity) :
     )
 
     var anchorToCamDist = getDistFromCamera(anchor, camera)
-    var textSize = getTextSize(anchorToCamDist)
+    var textSize = getTextSize(anchorToCamDist, not_searched)
     activity.runOnUiThread{ anchorText.setTextSize(textSize) }
 
     anchorText.x = anchor_2d[0] - (anchorText.width/2)
     anchorText.y = anchor_2d[1]
   }
 
-  private fun getTextSize(anchorDist : Double) : Float {
-    val maxReducableDist = 2.0 //You can have anchors farther than that, they just wont have their text size shrunk further
-    var dist = anchorDist
-    if(anchorDist>maxReducableDist)
-      dist = maxReducableDist
-    var sizeScale = maxReducableDist - dist
-    return (MIN_TEXT_SIZE + ((sizeScale / maxReducableDist) * (MAX_TEXT_SIZE - MIN_TEXT_SIZE))).toFloat()
+  private fun getTextSize(anchorDist : Double, not_searched : Int) : Float {
+    if (not_searched == 1) {
+      return 0.0f
+    }
+    else {
+      val maxReducableDist = 2.0 //You can have anchors farther than that, they just wont have their text size shrunk further
+      var dist = anchorDist
+      if(anchorDist>maxReducableDist)
+        dist = maxReducableDist
+      var sizeScale = maxReducableDist - dist
+      return (MIN_TEXT_SIZE + ((sizeScale / maxReducableDist) * (MAX_TEXT_SIZE - MIN_TEXT_SIZE))).toFloat()
+    }
   }
 
   private fun getDistFromCamera(anchor: Anchor, camera : Camera): Double {
@@ -713,9 +754,15 @@ class ArRenderer(val activity: ArActivity) :
   }
 
   private fun show_anchor_from_search(matchedIds: ArrayList<Int>): List<WrappedAnchor> {
-    val new_wrappedAnchors = wrappedAnchors.filter { (anchor, trackable) -> matchedIds.contains(anchor.hashCode()) }
+    val searched_wrappedAnchors = wrappedAnchors.filter { (anchor, trackable) -> matchedIds.contains(anchor.hashCode()) }
 
-    return new_wrappedAnchors;
+    return searched_wrappedAnchors;
+  }
+
+  private fun show_anchor_not_from_search(matchedIds: ArrayList<Int>): List<WrappedAnchor> {
+    val not_searched_wrappedAnchors = wrappedAnchors.filter { (anchor, trackable) -> !matchedIds.contains(anchor.hashCode()) }
+
+    return not_searched_wrappedAnchors;
   }
 
   private fun ids_to_keywords(ids: HashSet<Int>): List<String> {
