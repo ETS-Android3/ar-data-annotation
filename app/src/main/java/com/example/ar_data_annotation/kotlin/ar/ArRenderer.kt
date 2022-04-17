@@ -471,6 +471,9 @@ class ArRenderer(val activity: ArActivity) :
         Log.v(TAG, "anchor.pose=" + anchor.pose);
         anchor.pose.toMatrix(modelMatrix, 0)
 
+        // Show TextView for previous unsearched item
+        updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 0)
+
         // Calculate model/view/projection matrices
         Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
         Matrix.multiplyMM(modelViewProjectionMatrix, 0, projectionMatrix, 0, modelViewMatrix, 0)
