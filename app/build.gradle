@@ -50,6 +50,10 @@ dependencies {
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
     implementation 'com.google.guava:guava:27.0.1-android'
 
+    // Add for store and retrieve anchors from our backend
+    implementation 'com.google.code.gson:gson:2.9.0'
+    implementation 'com.beust:klaxon:5.5'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.4.1'
 
     // default library
     implementation 'androidx.core:core-ktx:1.7.0'

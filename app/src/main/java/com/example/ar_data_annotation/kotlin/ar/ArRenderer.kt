@@ -24,6 +24,7 @@ import android.view.View
 import android.widget.*
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import com.beust.klaxon.*
 import com.example.ar_data_annotation.R
 import com.example.ar_data_annotation.java.common.helpers.DisplayRotationHelper
 import com.example.ar_data_annotation.java.common.helpers.TrackingStateHelper
@@ -34,7 +35,18 @@ import com.example.ar_data_annotation.java.common.samplerender.arcore.SpecularCu
 import com.google.ar.core.*
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.NotYetAvailableException
-import java.io.IOException
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+
+import java.io.*
+import java.net.HttpURLConnection
+import java.net.URL
 import java.nio.ByteBuffer
 
 
@@ -84,7 +96,7 @@ class ArRenderer(val activity: ArActivity) :
   // For Id (hashCode), store newAnchor.hashCode() instead of firstHitResult.hashCode()
   val keywordToId = HashMap<String, Int>()
   val IdToKeyword = HashMap<Int, String>()
-  val searchResult = HashSet<Int>()
+  val cloudHashCodes = HashSet<String>()
 
   lateinit var render: SampleRender
   lateinit var planeRenderer: PlaneRenderer
@@ -141,10 +153,6 @@ class ArRenderer(val activity: ArActivity) :
     searchList.add("Orange")
     searchList.add("Mango")
     searchList.add("Grapes")*/
-//    searchList.add("Lemon")
-//    searchList.add("Melon")
-//    searchList.add("Watermelon")
-//    searchList.add("Papaya")
     // keep 0 markers initially
     return searchList
   }
@@ -171,7 +179,7 @@ class ArRenderer(val activity: ArActivity) :
   }
 
 
-  //  // This method implements the search logic
+  // This method implements the search logic
   fun setSearchListener(adapter: ArrayAdapter<String>, searchView: SearchView, listView: ListView) {
     rendAdapter = adapter
     searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
@@ -201,6 +209,29 @@ class ArRenderer(val activity: ArActivity) :
         return true;
       }
     })
+  }
+
+  fun getOwnCloudAnchors() {
+    val apiResponse = URL("http://10.0.2.2:5000/ardata/1").readText()
+    val klaxon = Klaxon()
+    JsonReader(StringReader(apiResponse)).use { reader ->
+      reader.beginArray {
+        while (reader.hasNext()) {
+          val ownCloudAnchor = klaxon.parse<cloudAnchorJson>(reader)
+          if (ownCloudAnchor != null) {
+            Log.v(TAG, "apiResponse=" + ownCloudAnchor.anchorPose);
+            val modelMtxJson = ownCloudAnchor.modelMatrix.removeSurrounding("[", "]").split(",").map { it.toFloat() }
+            var ownCloudModelMtx = modelMtxJson.toFloatArray()
+            val ownCloudPoseJson = ownCloudAnchor.anchorPose.removeSurrounding("[", "]").split(",").map { it.toFloat() }
+            var ownCloudPose = ownCloudPoseJson.toFloatArray()
+            var testTextView = activity.setNewTextView(ownCloudAnchor.keyword, 0f, 0f, 4444344)
+            var cloudWrappedAnchor = WrappedAnchor(null, null, testTextView, ownCloudModelMtx, ownCloudPose)
+            wrappedAnchors.add(cloudWrappedAnchor)
+            cloudHashCodes.add(ownCloudAnchor.hashcode)
+          }
+        }
+      }
+    }
   }
 
   override fun onResume(owner: LifecycleOwner) {
@@ -313,6 +344,10 @@ class ArRenderer(val activity: ArActivity) :
       Log.e(TAG, "Failed to read a required asset file", e)
       showError("Failed to read a required asset file: $e")
     }
+
+    // get cloud anchors from our backend
+    getOwnCloudAnchors()
+
   }
 
   override fun onSurfaceChanged(render: SampleRender, width: Int, height: Int) {
@@ -468,11 +503,14 @@ class ArRenderer(val activity: ArActivity) :
 
       // draw searched anchors
       for ((anchor, trackable, anchorText) in searched_anchors) {
-        Log.v(TAG, "anchor.pose=" + anchor.pose);
-        anchor.pose.toMatrix(modelMatrix, 0)
+        if (anchor != null) {anchor.pose.toMatrix(modelMatrix, 0)}
+
+        val gson = Gson()
+        val modelMatrixJson = gson.toJson(modelMatrix)
+        Log.v(TAG, "modelMatrixJson =" + modelMatrixJson)
 
         // Show TextView for previous unsearched item
-        updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 0)
+        updateAnchorText(anchor,null, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 0)
 
         // Calculate model/view/projection matrices
         Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
@@ -494,52 +532,74 @@ class ArRenderer(val activity: ArActivity) :
       }
 
       // draw not searched anchors
-      for ((anchor, trackable, anchorText) in not_searched_anchors) {
-        Log.v(TAG, "anchor.pose=" + anchor.pose);
-        updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 1)
+      for ((anchor, trackable, anchorText, cloudModelMtx, cloudAnchorPose) in not_searched_anchors) {
+        if (anchor != null) {
+          anchor.pose.toMatrix(modelMatrix, 0)
+          updateAnchorText(anchor,null,anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 1)
+          Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
+        } else {
+          updateAnchorText(null,cloudAnchorPose,anchorText, camera, cloudModelMtx, viewMatrix, projectionMatrix, 1)
+          Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, cloudModelMtx, 0)
+        }
+
+        // updateAnchorText(anchor,cloudAnchorPose, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 1)
       }
 
     }
     // If no search
     else {
-      for ((anchor, trackable, anchorText) in
-        wrappedAnchors.filter { it.anchor.trackingState == TrackingState.TRACKING }) {
+      for ((anchor, trackable, anchorText, cloudModelMtx, cloudAnchorPose) in
+      wrappedAnchors) {
+        // wrappedAnchors.filter { it.anchor.trackingState == TrackingState.TRACKING }) {
         // Get the current pose of an Anchor in world space. The Anchor pose is updated
         // during calls to session.update() as ARCore refines its estimate of the world.
-        anchor.pose.toMatrix(modelMatrix, 0)
-        updateAnchorText(anchor, anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 0)
+        if (anchor != null) {
+          anchor.pose.toMatrix(modelMatrix, 0)
+          updateAnchorText(anchor,null,anchorText, camera, modelMatrix, viewMatrix, projectionMatrix, 0)
+          Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
+        } else {
+          updateAnchorText(null,cloudAnchorPose,anchorText, camera, cloudModelMtx, viewMatrix, projectionMatrix, 0)
+          Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, cloudModelMtx, 0)
+        }
+
 
         // Calculate model/view/projection matrices
-        Matrix.multiplyMM(modelViewMatrix, 0, viewMatrix, 0, modelMatrix, 0)
+
         Matrix.multiplyMM(modelViewProjectionMatrix, 0, projectionMatrix, 0, modelViewMatrix, 0)
 
         // Update shader properties and draw
         virtualObjectShader.setMat4("u_ModelView", modelViewMatrix)
         virtualObjectShader.setMat4("u_ModelViewProjection", modelViewProjectionMatrix)
-        val texture =
-          if ((trackable as? InstantPlacementPoint)?.trackingMethod ==
-            InstantPlacementPoint.TrackingMethod.SCREENSPACE_WITH_APPROXIMATE_DISTANCE
-          ) {
-            virtualObjectAlbedoInstantPlacementTexture
-          } else {
-            virtualObjectAlbedoTexture
-          }
+        val texture = virtualObjectAlbedoTexture
+
         virtualObjectShader.setTexture("u_AlbedoTexture", texture)
         render.draw(virtualObjectMesh, virtualObjectShader, virtualSceneFramebuffer)
+        var anchorCode = anchor.hashCode()
+
+        if (anchor != null && !cloudHashCodes.contains(anchorCode.toString())) {
+          var ownCloudAnchorKeyword = anchorText.text.toString()
+          val gson = Gson()
+          val ownCloudAnchorModelMatrix = FloatArray(16)
+          anchor.pose.toMatrix(ownCloudAnchorModelMatrix, 0)
+          val ownCloudAnchorModelMatrixJson = gson.toJson(ownCloudAnchorModelMatrix)
+          var ownCloudAnchorPose = floatArrayOf(anchor.pose.tx(), anchor.pose.ty(), anchor.pose.tz())
+          val ownCloudAnchorPoseJson = gson.toJson(ownCloudAnchorPose)
+          var ownCloudAnchor =  cloudAnchorJson(ownCloudAnchorPoseJson,ownCloudAnchorKeyword,ownCloudAnchorModelMatrixJson, "1", anchorCode.toString())
+          postOwnCloudAnchor(ownCloudAnchor)
+        }
       }
     }
-
-
 
     // Compose the virtual scene with the background.
     backgroundRenderer.drawVirtualScene(render, virtualSceneFramebuffer, Z_NEAR, Z_FAR)
   }
 
   private fun updateAnchorText(
-    anchor: Anchor,
+    anchor: Anchor? = null,
+    cloudAnchorPose: FloatArray? = null,
     anchorText: TextView,
     camera: Camera,
-    modelMatrix: FloatArray,
+    modelMatrix: FloatArray? = null,
     viewMatrix: FloatArray,
     projectionMatrix: FloatArray,
     not_searched: Int
@@ -547,15 +607,13 @@ class ArRenderer(val activity: ArActivity) :
     val displayMetrics = DisplayMetrics()
     activity.populateDisplayMetrics(displayMetrics)
     val anchor_2d = get2DAnchorCoordinates(
-      anchor,
-      camera,
       displayMetrics,
       modelMatrix,
       viewMatrix,
       projectionMatrix
     )
 
-    var anchorToCamDist = getDistFromCamera(anchor, camera)
+    var anchorToCamDist = getDistFromCamera(anchor, camera, cloudAnchorPose)
     var textSize = getTextSize(anchorToCamDist, not_searched)
     activity.runOnUiThread{ anchorText.setTextSize(textSize) }
 
@@ -577,8 +635,10 @@ class ArRenderer(val activity: ArActivity) :
     }
   }
 
-  private fun getDistFromCamera(anchor: Anchor, camera : Camera): Double {
-    return dictCalculation3D(anchor.pose.tx(), camera.pose.tx(), anchor.pose.ty(), camera.pose.ty(), anchor.pose.tz(), camera.pose.tz())
+  private fun getDistFromCamera(anchor: Anchor? = null, camera : Camera, cloudAnchorPose: FloatArray? = null): Double {
+    if (anchor != null) return dictCalculation3D(anchor.pose.tx(), camera.pose.tx(), anchor.pose.ty(), camera.pose.ty(), anchor.pose.tz(), camera.pose.tz())
+    else if (cloudAnchorPose != null) return dictCalculation3D(cloudAnchorPose[0], camera.pose.tx(), cloudAnchorPose[1], camera.pose.ty(), cloudAnchorPose[2], camera.pose.tz())
+    return 0.0
   }
 
   private fun dictCalculation3D(x1 : Float, x2 : Float, y1 : Float, y2: Float, z1 : Float, z2 : Float) : Double {
@@ -688,7 +748,7 @@ class ArRenderer(val activity: ArActivity) :
       // Cap the number of objects created. This avoids overloading both the
       // rendering system and ARCore.
       if (wrappedAnchors.size >= 20) {
-        wrappedAnchors[0].anchor.detach()
+        if (wrappedAnchors[0].anchor!= null) wrappedAnchors[0].anchor?.detach()
         wrappedAnchors.removeAt(0)
       }
 
@@ -700,21 +760,65 @@ class ArRenderer(val activity: ArActivity) :
       var newWrappedAnchor = WrappedAnchor(newAnchor, firstHitResult.trackable, activity.setNewTextView(defaultAnchorText + " #${anchorCounter}", 0f, 0f, newAnchor.hashCode()))
       activity.promptAnchorText(newWrappedAnchor)
       anchorCounter++
-
       wrappedAnchors.add(newWrappedAnchor)
 
       Log.v(TAG, "create object wrappedAnchors[0].anchor.hashCode=" + wrappedAnchors[0].anchor.hashCode());
       // For devices that support the Depth API, shows a dialog to suggest enabling
       // depth-based occlusion. This dialog needs to be spawned on the UI thread.
       activity.runOnUiThread { activity.view.showOcclusionDialogIfNeeded() }
+
     }
+  }
+  fun postOwnCloudAnchor(ownCloudAnchor: cloudAnchorJson) {
+
+    // Create JSON using JSONObject
+    val jsonObject = JSONObject()
+    jsonObject.put("roomId", ownCloudAnchor.roomId)
+    jsonObject.put("keyword", ownCloudAnchor.keyword)
+    jsonObject.put("modelMatrix", ownCloudAnchor.modelMatrix)
+    jsonObject.put("anchorPose", ownCloudAnchor.anchorPose)
+    jsonObject.put("hashcode", ownCloudAnchor.hashcode)
+
+    // Convert JSONObject to String
+    val jsonObjectString = jsonObject.toString()
+
+    GlobalScope.launch(Dispatchers.IO) {
+      val url = URL("http://10.0.2.2:5000/push_data")
+      val httpURLConnection = url.openConnection() as HttpURLConnection
+      httpURLConnection.requestMethod = "POST"
+      httpURLConnection.setRequestProperty("Content-Type", "application/json") // The format of the content we're sending to the server
+      httpURLConnection.setRequestProperty("Accept", "application/json") // The format of response we want to get from the server
+      httpURLConnection.doInput = true
+      httpURLConnection.doOutput = true
+
+      // Send the JSON we created
+      val outputStreamWriter = OutputStreamWriter(httpURLConnection.outputStream)
+      outputStreamWriter.write(jsonObjectString)
+      outputStreamWriter.flush()
+
+      // Check if the connection is successful
+      val responseCode = httpURLConnection.responseCode
+      if (responseCode == HttpURLConnection.HTTP_OK) {
+        val response = httpURLConnection.inputStream.bufferedReader()
+          .use { it.readText() }  // defaults to UTF-8
+        withContext(Dispatchers.Main) {
+
+          // Convert raw JSON to pretty JSON using GSON library
+          val gson = GsonBuilder().setPrettyPrinting().create()
+          val prettyJson = gson.toJson(JsonParser.parseString(response))
+          Log.d("Pretty Printed JSON :", prettyJson)
+          cloudHashCodes.add(ownCloudAnchor.hashcode)
+        }
+      } else {
+        Log.e("HTTPURLCONNECTION_ERROR", responseCode.toString())
+      }
+    }
+
   }
 
   private fun get2DAnchorCoordinates(
-    anchor: Anchor,
-    camera: Camera,
     displayMetrics: DisplayMetrics,
-    modelMatrix: FloatArray,
+    modelMatrix: FloatArray?,
     viewMatrix: FloatArray,
     projectionMatrix: FloatArray
   ): FloatArray {
@@ -826,7 +930,17 @@ class ArRenderer(val activity: ArActivity) :
  * whether or not an Anchor originally was attached to an {@link InstantPlacementPoint}.
  */
 data class WrappedAnchor(
-  val anchor: Anchor,
-  val trackable: Trackable,
-  val anchorText: TextView
+  val anchor: Anchor? = null,
+  val trackable: Trackable? = null,
+  val anchorText: TextView,
+  val cloudModelMatrix: FloatArray? = null,
+  val cloudAnchorPose: FloatArray? = null
+)
+
+data class cloudAnchorJson(
+  val anchorPose: String,
+  val keyword: String,
+  val modelMatrix: String,
+  val roomId: String,
+  val hashcode: String
 )
